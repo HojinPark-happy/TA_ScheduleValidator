@@ -8,7 +8,8 @@ from django.views import View
 from django.contrib import auth, messages
 from CS361WebApp.models import CourseTime, SavePriority, CreatePriority
 from django.contrib.auth.decorators import login_required, user_passes_test
-from CS361WebApp.forms import CourseTimeForm, AssignUserForm, PriorityList, Priority
+from CS361WebApp.forms import CourseTimeForm, AssignUserForm, Priority
+from user.models import Profile
 
 
 def admin_check(user):
@@ -18,7 +19,9 @@ def admin_check(user):
 @login_required
 def home(request):
     course_result = CourseTime.objects.all()
-    return render(request, 'CS361WebApp/home.html', {"courses": course_result})
+    profile = Profile.objects.filter(user=request.user)
+
+    return render(request, 'CS361WebApp/home.html', {"courses": course_result, 'profile': profile})
 
 
 @login_required
@@ -43,10 +46,31 @@ def coursetime(request):
 @login_required
 def assign(request):
     form = AssignUserForm(request.POST)
+    person = Profile.objects.get(user=request.user)
+    completeform = 0
+    if person.role == 1:
+        return redirect('CS361WebApp-home')
     if form.is_valid():
         class1 = form.cleaned_data.get('course')
         instructor = form.cleaned_data.get('instructor')
-        class1.instructor = instructor
+        if person.role == 2 and instructor.role == 2:
+            return redirect('CS361WebApp-assign')
+        class1.instructor = str(instructor)
+        section = int(class1.section)
+        if instructor.role == 1:
+            if section <= 401:
+                class1.instructor = ''
+                completeform = 1
+        elif instructor.role == 2:
+            if section > 401:
+                class1.instructor = ''
+                completeform = 1
+        if completeform == 0:
+            courses = CourseTime.objects.filter(instructor=instructor)
+            for classes in courses:
+                if classes.day == class1.day:
+                    if classes.start.hour <= class1.start.hour <= classes.end.hour or classes.start.hour <= class1.end.hour <= classes.end.hour:
+                        return redirect('CS361WebApp-assign')
         class1.save()
         messages.success(request, f'{instructor} assigned to {class1}!')
         redirect('CS361WebApp-home')
@@ -61,6 +85,9 @@ def classlist(request):
     for yeet in profile:
         x = yeet.myList.order_by('priority')
     if request.method == 'POST':
+        person = Profile.objects.get(user=request.user)
+        if person.role != 1:
+            return redirect('CS361WebApp-home')
         form = Priority(request.POST)
 
         if form.is_valid():
@@ -77,14 +104,16 @@ def classlist(request):
 
             add = CreatePriority.objects.filter(classes=course).filter(priority=priority).first()
             test = SavePriority.objects.filter(user=name)
-
+            section = int(add.classes.section)
+            if section <= 401:
+                return redirect('CS361WebApp-classList')
             changed1 = 121111105110107
             changed2 = 121101101116
             for yeeet in test:
                 x = yeeet.myList.all()
                 for yeet in x:
                     if int(yeet.priority) == priority:
-                        changed1 = 69 #fuck
+                        changed1 = 69  # fuck
                         joe_mama = yeet
                     if yeet.classes == course:
                         changed2 = 420
